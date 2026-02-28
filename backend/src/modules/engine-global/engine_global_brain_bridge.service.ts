@@ -282,6 +282,34 @@ export async function getEngineGlobalWithBrain(params: {
     withinCap: totalIntensity <= intensityCap,
   };
   
+  // ─────────────────────────────────────────────────────────────
+  // P12: Get Adaptive params info
+  // ─────────────────────────────────────────────────────────────
+  
+  let adaptiveSection: AdaptiveSection | undefined;
+  try {
+    const adaptiveParams = await getAdaptiveService().getParams('dxy');
+    adaptiveSection = {
+      mode: adaptiveParams.source === 'promoted' ? 'on' : (adaptiveParams.source === 'tuned' ? 'shadow' : 'off'),
+      versionId: adaptiveParams.versionId,
+      asset: adaptiveParams.asset,
+      source: adaptiveParams.source,
+      deltasApplied: {
+        brain: adaptiveParams.brain,
+        optimizer: {
+          K: adaptiveParams.optimizer.K,
+          wReturn: adaptiveParams.optimizer.wReturn,
+          wTail: adaptiveParams.optimizer.wTail,
+          wCorr: adaptiveParams.optimizer.wCorr,
+          wGuard: adaptiveParams.optimizer.wGuard,
+        },
+        metarisk: adaptiveParams.metarisk,
+      },
+    };
+  } catch (e) {
+    console.warn('[EngineBrain] Adaptive params unavailable:', (e as Error).message);
+  }
+  
   // Update evidence with brain info
   const enhancedEvidence = {
     ...engineOut.evidence,
