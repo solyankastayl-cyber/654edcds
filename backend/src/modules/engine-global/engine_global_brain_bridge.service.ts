@@ -56,6 +56,18 @@ export interface OverrideIntensitySection {
   withinCap: boolean;
 }
 
+export interface AdaptiveSection {
+  mode: AdaptiveMode;
+  versionId: string;
+  asset: string;
+  source: string;
+  deltasApplied: {
+    brain: { tailQ05: number; spread: number; bullMean: number };
+    optimizer: { K: number; wReturn: number; wTail: number; wCorr: number; wGuard: number };
+    metarisk: { durationScale: number; stabilityScale: number; flipPenalty: number; crossAdj: number };
+  };
+}
+
 export interface BrainSection {
   mode: BrainMode;
   decision?: BrainOutputPack;
