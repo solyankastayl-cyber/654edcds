@@ -263,14 +263,56 @@ export async function getEngineGlobalWithBrain(params: {
   }
   
   // ─────────────────────────────────────────────────────────────
-  // Calculate split override intensity (P12 fix)
+  // Calculate split override intensity (P12 fix - corrected)
+  // 
+  // Three components:
+  //   1. brainDirectives: delta from Brain caps/haircuts/scales ONLY
+  //   2. metaRiskScale: delta from globalScale application
+  //   3. optimizer: delta from Optimizer adjustments
+  //   
+  // Total = sum of all three (measured vs BASE allocations)
   // ─────────────────────────────────────────────────────────────
   
-  const brainIntensity = bridgeResult.metaRisk.intensityAfter;
+  // Get base allocations (step 0) for reference
+  const baseStep = bridgeResult.steps.find(s => s.step === '0_base');
+  const baseSpx = baseStep?.spx ?? engineAllocations.spxSize;
+  const baseBtc = baseStep?.btc ?? engineAllocations.btcSize;
+  
+  // Get allocations after Brain directives (step 1)
+  const afterBrainStep = bridgeResult.steps.find(s => s.step === '1_brain_directives');
+  const afterBrainSpx = afterBrainStep?.spx ?? baseSpx;
+  const afterBrainBtc = afterBrainStep?.btc ?? baseBtc;
+  
+  // Get allocations after globalScale (step 4 or final from bridge)
+  const afterScaleStep = bridgeResult.steps.find(s => s.step === '4_global_scale');
+  const afterScaleSpx = afterScaleStep?.spx ?? afterBrainSpx;
+  const afterScaleBtc = afterScaleStep?.btc ?? afterBrainBtc;
+  
+  // 1. Brain directives intensity (caps/haircuts/scales only)
+  const brainDirectivesIntensity = Math.max(
+    Math.abs(afterBrainSpx - baseSpx),
+    Math.abs(afterBrainBtc - baseBtc)
+  );
+  
+  // 2. MetaRisk globalScale intensity
+  const metaRiskScaleIntensity = Math.max(
+    Math.abs(afterScaleSpx - afterBrainSpx),
+    Math.abs(afterScaleBtc - afterBrainBtc)
+  );
+  
+  // 3. Optimizer intensity
   const optimizerIntensity = optimizerResult 
     ? Math.max(Math.abs(optimizerResult.deltas.spx), Math.abs(optimizerResult.deltas.btc))
     : 0;
-  const totalIntensity = brainIntensity + optimizerIntensity;
+  
+  // Total intensity = delta from base to final
+  const finalSpx = finalAllocations.spxSize;
+  const finalBtc = finalAllocations.btcSize;
+  const totalIntensity = Math.max(
+    Math.abs(finalSpx - baseSpx),
+    Math.abs(finalBtc - baseBtc)
+  );
+  
   const scenario = brainDecision?.scenario?.name || 'BASE';
   const intensityCap = scenario === 'TAIL' ? 0.60 : 0.35;
   
