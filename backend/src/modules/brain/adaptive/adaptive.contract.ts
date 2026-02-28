@@ -99,6 +99,26 @@ export interface TuningMetrics {
   maxOverrideIntensity: number;
   stabilityScore: number;        // 0..1 (variance of deltas between steps)
   degradationCount: number;      // How many horizons degraded
+  
+  // P12 Extended metrics
+  tailScenarioRate: number;      // % of steps where scenario=TAIL
+  intensityVariance: number;     // Variance of override intensity
+  regimeFlipSensitivity: number; // How often regime changes affect delta
+  
+  // Horizon breakdown
+  deltaByHorizon: {
+    d30: number;                 // Hit rate for 30D
+    d90: number;                 // Hit rate for 90D
+    d180: number;                // Hit rate for 180D
+    d365: number;                // Hit rate for 365D
+  };
+  
+  // Regime breakdown
+  flipRateByRegime: {
+    base: number;
+    risk: number;
+    tail: number;
+  };
 }
 
 export interface TuningRunReport {
