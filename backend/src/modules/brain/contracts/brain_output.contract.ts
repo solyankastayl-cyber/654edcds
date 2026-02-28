@@ -85,6 +85,9 @@ export interface BrainOutputPack {
   // High-level scenario
   scenario: ScenarioPack;
   
+  // P12.0: Scenario diagnostics for transparency
+  scenarioDiagnostics?: ScenarioDiagnostics;
+  
   // Per-asset forecasts (optional, for ML layer)
   forecasts?: Partial<Record<AssetId, AssetForecast>>;
   
