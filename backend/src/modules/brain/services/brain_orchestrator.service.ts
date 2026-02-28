@@ -62,12 +62,15 @@ export class BrainOrchestratorService {
     let scenario: ScenarioPack;
     let directives: BrainDirectives;
     let overrideReasoning: OverrideReasoning | undefined;
+    let scenarioDiagnostics: any = undefined;  // P12.0
     
     if (forecast) {
       // P8.0-C: New forecast-driven flow
+      // P12.0: Now with Sanity Layer
       const scenarioResult = computeForecastScenario(forecast, world);
       scenario = scenarioResult.scenario;
       overrideReasoning = scenarioResult.reasoning;
+      scenarioDiagnostics = scenarioResult.diagnostics;  // P12.0
       directives = computeForecastOverrides(forecast, world, scenario, overrideReasoning);
       
       // P9.0: Cross-asset correlation overrides
@@ -90,11 +93,12 @@ export class BrainOrchestratorService {
     const output: BrainOutputPack = {
       asOf,
       scenario,
+      scenarioDiagnostics,  // P12.0: Include diagnostics for transparency
       directives,
       evidence,
       meta: {
         engineVersion: 'v2',
-        brainVersion: forecast ? 'v2.1.0-moe' : 'v2.0.0-legacy',
+        brainVersion: forecast ? 'v2.1.0-moe-sanity' : 'v2.0.0-legacy',  // P12.0 version bump
         computeTimeMs: Date.now() - startTime,
         inputsHash: world.meta.inputsHash,
         // MetaRisk fields will be added by engine bridge
