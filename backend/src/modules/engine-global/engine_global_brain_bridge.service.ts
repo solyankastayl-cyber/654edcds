@@ -74,6 +74,7 @@ export interface BrainSection {
   wouldApply?: BrainWouldApply;
   metaRisk?: MetaRiskSection;
   overrideIntensity?: OverrideIntensitySection;  // P12: Split intensity
+  adaptive?: AdaptiveSection;  // P12: Adaptive params info
   bridgeSteps?: any[];
   warnings?: string[];
   optimizer?: OptimizerOutput;
