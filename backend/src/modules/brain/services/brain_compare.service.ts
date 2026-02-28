@@ -30,9 +30,13 @@ export class BrainCompareService {
     const engineOff = await buildEngineGlobal(asOf);
     const offAllocations = this.extractAllocations(engineOff);
 
-    // 2. Get engine output WITH brain
+    // 2. Get engine output WITH brain (no optimizer)
     const engineOn = await getEngineGlobalWithBrain({ asOf, brain: true, brainMode: 'on' });
     const onAllocations = this.extractAllocations(engineOn);
+    
+    // 2.1 Get engine output WITH brain + optimizer
+    const engineOnOpt = await getEngineGlobalWithBrain({ asOf, brain: true, brainMode: 'on', optimizer: true });
+    const onOptAllocations = this.extractAllocations(engineOnOpt);
 
     // 3. Get brain decision for context
     const brainService = getBrainOrchestratorService();
@@ -44,6 +48,17 @@ export class BrainCompareService {
       btc: round4(onAllocations.btcSize - offAllocations.btcSize),
       cash: round4(onAllocations.cashSize - offAllocations.cashSize),
     };
+    
+    // 4.1 Calculate optimizer delta (separate)
+    const optimizerDelta = {
+      spx: round4(onOptAllocations.spxSize - onAllocations.spxSize),
+      btc: round4(onOptAllocations.btcSize - onAllocations.btcSize),
+      cash: round4(onOptAllocations.cashSize - onAllocations.cashSize),
+    };
+    const optimizerDeltaAbs = round4(Math.max(
+      Math.abs(optimizerDelta.spx),
+      Math.abs(optimizerDelta.btc)
+    ));
 
     const changed = this.buildChangedFields(offAllocations, onAllocations, decision);
     const severity = this.computeSeverity(delta);
@@ -74,6 +89,15 @@ export class BrainCompareService {
         regime: world.assets.dxy?.liquidity?.regime || 'NEUTRAL',
       },
     };
+    
+    // 7. Extract override intensity breakdown
+    const overrideIntensity = (engineOnOpt as any).brain?.overrideIntensity || {
+      brain: 0,
+      optimizer: 0,
+      total: 0,
+      cap: 0.35,
+      withinCap: true,
+    };
 
     return {
       asOf,
@@ -99,6 +123,9 @@ export class BrainCompareService {
       },
       diff: {
         allocationsDelta: delta,
+        optimizerDelta,
+        optimizerDeltaAbs,
+        overrideIntensity,
         changed,
         severity,
         diffHash,
