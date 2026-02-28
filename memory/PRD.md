@@ -1,7 +1,7 @@
 # Fractal Multi-Asset Platform PRD
 
 ## Original Problem Statement
-Развернуть код из GitHub для работы с фракталами валютных пар. Модули: BTC Fractal, SPX, DXY Macro Engine V2. Walk-Forward Simulation, Quantile Forecast, Brain Decision Layer, Cross-Asset Classifier, Brain Compare + Simulation. Добавить Stress Simulation Mode + Platform Crash-Test для институционального аудита.
+Развернуть код из GitHub для работы с фракталами валютных пар. Модули: BTC Fractal, SPX, DXY Macro Engine V2. Walk-Forward Simulation, Quantile Forecast, Brain Decision Layer, Cross-Asset Classifier, Brain Compare + Simulation. Добавить P12 - Adaptive Coefficient Learning для институционального аудита.
 
 ## Architecture
 - **Backend**: TypeScript (Fastify) 8002 + Python proxy 8001
@@ -15,9 +15,10 @@ WorldState + CrossAsset → Quantile Forecast (MoE) → Scenario Engine → Risk
                                                          Brain Compare (ON vs OFF)
                                                          Brain Simulation (Walk-Forward)
                                                          Stress Simulation + Crash-Test
+                                                         Adaptive Coefficient Learning (P12)
 ```
 
-## Implemented Features (2026-02-27)
+## Implemented Features (2026-02-28)
 
 | Phase | Feature | Status | Tests |
 |-------|---------|--------|-------|
@@ -28,85 +29,89 @@ WorldState + CrossAsset → Quantile Forecast (MoE) → Scenario Engine → Risk
 | P9.0 | Cross-Asset Regime Classifier | ✅ | 20/20 |
 | P9.1 | Brain ON vs OFF Compare | ✅ | 22/22 |
 | P9.2 | Walk-Forward Simulation | ✅ | 22/22 |
-| P10 | **Stress Simulation Mode** | ✅ NEW | — |
-| P11 | **Platform Crash-Test** | ✅ NEW | PRODUCTION Grade |
+| P10 | Stress Simulation Mode | ✅ | — |
+| P10.1 | Regime Memory State | ✅ | — |
+| P10.2 | MetaRisk Scale | ✅ | — |
+| P10.3 | Brain/Engine Integration | ✅ | — |
+| P11 | Capital Allocation Optimizer | ✅ | — |
+| P12 | **Adaptive Coefficient Learning** | ✅ NEW | PRODUCTION Grade |
 
-## Stress Simulation + Crash-Test (NEW)
+## P12 — Adaptive Coefficient Learning (IMPLEMENTED 2026-02-28)
 
-### Black Swan Library Presets
-| Preset | Description | Key Overrides |
-|--------|-------------|---------------|
-| COVID_CRASH | March 2020-style pandemic | tailRisk=0.65, volSpike=0.8 |
-| 2008_STYLE | GFC systemic crisis | tailRisk=0.8, contagion=0.9 |
-| USD_SPIKE | Dollar spike event | tailRisk=0.45, corrDxySpx=-0.7 |
-| LIQUIDITY_FREEZE | Liquidity contraction | tailRisk=0.5, liquidityImpulse=-0.9 |
+### Philosophy
+- NOT ML blackbox — rolling recalibration of weights
+- Grid search with smoothing (alpha=0.35)
+- Strict acceptance gates
+- Never touch: guard dominance, shrink logic, TAIL risk-down
 
-### Crash-Test Results (2026-02-27)
-- **Resilience Score**: 1.0 (100%)
-- **Grade**: PRODUCTION
-- **All checks passed**
-  - NaN Count: 0
-  - Flip Storm: False
-  - Cap Violations: 0
-  - Override Explosions: 0
-  - Determinism Fail: False
+### Parameter Groups
+| Group | Description | Tunable |
+|-------|-------------|---------|
+| brain_rules | Brain Quantile thresholds | No (too sensitive) |
+| optimizer | Optimizer coefficients (K, wReturn, wTail, wCorr, wGuard) | Yes |
+| metarisk | MetaRisk mapping (durationScale, stabilityScale, flipPenalty, crossAdj) | Yes |
+
+### Acceptance Gates
+- avgDeltaHitRatePp >= 2
+- minDeltaPp >= -1
+- flipRatePerYear <= 6
+- maxOverrideIntensity <= cap (0.35 BASE, 0.60 TAIL)
+- determinism = true
+- noLookahead = true
 
 ### API Endpoints
-
-#### Stress Simulation
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| /api/brain/v2/stress/presets | GET | List black swan presets |
-| /api/brain/v2/stress/run | POST | Run stress (sync) |
-| /api/brain/v2/stress/run-async | POST | Run stress (async) |
-| /api/brain/v2/stress/status | GET | Get latest result |
+| /api/brain/v2/adaptive/params | GET | Current params |
+| /api/brain/v2/adaptive/schema | GET | Schema docs |
+| /api/brain/v2/adaptive/run | POST | Start tuning run |
+| /api/brain/v2/adaptive/status | GET | Get run status/report |
+| /api/brain/v2/adaptive/history | GET | Params history |
+| /api/brain/v2/adaptive/promote | POST | Promote params to active |
 
-#### Platform Crash-Test
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| /api/platform/crash-test/run | POST | Run full test (sync) |
-| /api/platform/crash-test/run-async | POST | Run full test (async) |
-| /api/platform/crash-test/status | GET | Get latest result |
+### P12 Fix: Override Intensity Breakdown
+Engine Global response now includes:
+```json
+{
+  "brain": {
+    "overrideIntensity": {
+      "brain": 0.0,
+      "optimizer": 0.08,
+      "total": 0.08,
+      "cap": 0.6,
+      "withinCap": true
+    },
+    "adaptive": {
+      "mode": "off|shadow|on",
+      "versionId": "default_dxy_v1",
+      "asset": "dxy",
+      "source": "default|tuned|promoted",
+      "deltasApplied": { "brain":..., "optimizer":..., "metarisk":... }
+    }
+  }
+}
+```
+
+### P12 Fix: Compare Endpoint
+Brain Compare now includes:
+- `optimizerDelta` - deltas from optimizer
+- `optimizerDeltaAbs` - max absolute delta
+- `overrideIntensity` - breakdown brain/optimizer/total
 
 ## All API Endpoints
-
-### Brain Core
-| Endpoint | Method | Status |
-|----------|--------|--------|
-| /api/brain/v2/decision | GET | Working (MoE + CrossAsset) |
-| /api/brain/v2/summary | GET | Working |
-| /api/brain/v2/status | GET | Working |
-| /api/brain/v2/apply-overrides | POST | Working |
-
-### Forecast (P8.0)
-| Endpoint | Method | Status |
-|----------|--------|--------|
-| /api/brain/v2/forecast | GET | Working (MoE) |
-| /api/brain/v2/forecast/train | POST | Working |
-| /api/brain/v2/forecast/status | GET | Working |
-| /api/brain/v2/forecast/compare | GET | Working |
-
-### Cross-Asset (P9.0)
-| Endpoint | Method | Status |
-|----------|--------|--------|
-| /api/brain/v2/cross-asset | GET | Working |
-| /api/brain/v2/cross-asset/schema | GET | Working |
-| /api/brain/v2/cross-asset/validate | POST | Working |
-| /api/brain/v2/cross-asset/timeline | GET | Working |
-
-### Compare + Sim (P9.1 + P9.2)
-| Endpoint | Method | Status |
-|----------|--------|--------|
-| /api/brain/v2/compare | GET | Working |
-| /api/brain/v2/compare/timeline | GET | Working |
-| /api/brain/v2/sim/run | POST | Working |
-| /api/brain/v2/sim/status | GET | Working |
-| /api/brain/v2/sim/report | GET | Working |
 
 ### Engine Global
 | Endpoint | Method | Status |
 |----------|--------|--------|
 | /api/engine/global | GET | Working |
+| /api/engine/global?brain=1&optimizer=1 | GET | Working (with P12 adaptive section) |
+
+### Brain Core
+| Endpoint | Method | Status |
+|----------|--------|--------|
+| /api/brain/v2/decision | GET | Working |
+| /api/brain/v2/compare | GET | Working (with optimizerDeltaAbs) |
+| /api/brain/v2/adaptive/* | GET/POST | Working (P12) |
 
 ## Frontend Routes
 | Route | Terminal | Status |
@@ -117,248 +122,24 @@ WorldState + CrossAsset → Quantile Forecast (MoE) → Scenario Engine → Risk
 | /admin | Admin Panel | ✅ |
 | /engine/compare | Compare Dashboard | ✅ |
 
+## Test Results (2026-02-28)
+- Backend: 100% - All P12 Adaptive APIs working perfectly
+- Frontend: 95% - All routes accessible, minor icon import warnings
+
 ## Prioritized Backlog
 
 ### P0 (Critical) - DONE
-- [x] Stress Simulation Mode (forceRegime=STRESS + black swan library)
-- [x] Platform crash-test on full system
-- [x] Async endpoints for long-running operations
+- [x] P12 Adaptive Coefficient Learning
+- [x] Override intensity breakdown (brain/optimizer/total)
+- [x] Adaptive section in Engine Global response
 
 ### P1 (High) - NEXT
-- [ ] Meta-Regime Memory Layer (how long in regime affects aggression)
-- [ ] Capital Allocation Optimizer (dynamic)
+- [ ] P13: Portfolio Return Backtest (реальные SPX/BTC returns + transaction costs)
+- [ ] UI for adaptive tuning controls
 
 ### P2 (Medium)
 - [ ] Telegram/Slack alerts for production
 - [ ] Daily cron for divergence checks
-- [ ] Stress test UI in Admin panel
-
-### P3 (Low)
-- [ ] Model versioning UI
-- [ ] Historical scenario backtest dashboard
-- [ ] Compare page UI improvements
 
 ---
-Last Updated: 2026-02-27
-
-## P10.1 — Regime Memory State (IMPLEMENTED 2026-02-27)
-
-### Architecture
-```
-WorldState → extractMacro/Guard/CrossAsset → updateScope → MongoDB
-                                                            ↓
-                                              regime_memory_state (current)
-                                              regime_history (daily records)
-```
-
-### Contracts
-- `RegimeMemoryState`: scope, current, since, daysInState, flips30d, stability
-- `RegimeMemoryPack`: macro + guard + crossAsset states
-- `RegimeTimelinePack`: points[] + summary
-
-### API Endpoints
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| /api/brain/v2/regime-memory/schema | GET | Schema docs |
-| /api/brain/v2/regime-memory/current | GET | Current state |
-| /api/brain/v2/regime-memory/timeline | GET | Historical |
-| /api/brain/v2/regime-memory/recompute | POST | Admin rebuild |
-
-### Test Results
-- **Determinism**: ✅ PASS (same asOf → same hash)
-- **NoLookahead**: ✅ PASS (historical days < current)
-- **Flip counting**: ✅ PASS (correct 30d window)
-- **Stability formula**: ✅ PASS (0.5*(days/90) + 0.5*(1-flips/10))
-
-### Current State (2026-02-27)
-| Scope | Current | Days | Stability |
-|-------|---------|------|-----------|
-| macro | NEUTRAL | 57 | 0.817 |
-| guard | NONE | 57 | 0.817 |
-| crossAsset | RISK_ON_SYNC | 57 | 0.817 |
-
-### Next: P10.2 — MetaRisk Scale
-
-## P10.2 — MetaRisk Scale (IMPLEMENTED 2026-02-27)
-
-### Formula
-```
-metaRiskScale = clamp(1.0 + Σcomponents, 0.60, 1.10)
-
-Components:
-- durationBoost:  EASING +0.08, NEUTRAL +0.03, TIGHTENING -0.06, STRESS -0.10
-- stabilityBoost: +0.05 * sat((stability-0.65)/0.25)
-- flipPenalty:    -0.10 * sat(flips30d/6)
-- guardDrag:      BLOCK -0.40, CRISIS -0.25, WARN -0.10
-- crossAssetAdj:  RISK_ON_SYNC +0.03, DECOUPLED -0.05, FLIGHT_TO_QUALITY -0.10
-- scenarioAdj:    TAIL -0.25, RISK -0.12, BASE +0.02
-```
-
-### Posture + Cap
-| Posture | Condition | Base Cap |
-|---------|-----------|----------|
-| OFFENSIVE | scale ≥ 1.03 | 0.45 |
-| NEUTRAL | 0.92 < scale < 1.03 | 0.35 |
-| DEFENSIVE | scale ≤ 0.92 OR guard/scenario | 0.25 |
-
-TAIL scenario allows cap up to 0.60 (risk-down only)
-
-### Test Gates (ALL PASSED)
-- ✅ Determinism: same asOf → same result
-- ✅ Monotonic duration: EASING boost positive
-- ✅ Guard dominance: BLOCK → scale ≤ 0.70
-- ✅ Flip penalty: 6 flips → -0.10
-- ✅ Cap correctness: TAIL → cap 0.60 + DEFENSIVE
-
-### Current Values (2026-02-27)
-| Metric | Value |
-|--------|-------|
-| metaRiskScale | 1.086 |
-| posture | OFFENSIVE |
-| maxOverrideCap | 0.45 |
-| durationBoost | +0.003 |
-| stabilityBoost | +0.033 |
-| crossAssetAdj | +0.03 |
-| scenarioAdj | +0.02 |
-
-### API Endpoints
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| /api/brain/v2/meta-risk | GET | Current MetaRisk |
-| /api/brain/v2/meta-risk/schema | GET | Schema docs |
-| /api/brain/v2/meta-risk/timeline | GET | Historical |
-| /api/brain/v2/meta-risk/simulate | POST | Test with overrides |
-
-### Next: P10.3 — Integration into Brain/Engine
-
-## P10.3 — Brain/Engine Integration (IMPLEMENTED 2026-02-27)
-
-### Pipeline Order (CRITICAL)
-```
-1. Base allocations (normalized)
-2. Apply Brain directives (caps/haircuts/scales)
-3. Calculate override intensity
-4. Enforce overrideCap (shrink if needed)
-5. Apply globalScale (metaRisk)
-6. TAIL risk clamp (no risk increase)
-7. Rebalance cash
-8. Final clamp + normalization
-```
-
-### Shrink Logic
-```
-if (intensityBefore > maxOverrideCap):
-    shrinkFactor = maxOverrideCap / intensityBefore
-    spx = base + delta * shrinkFactor
-    btc = base + delta * shrinkFactor
-```
-
-### MetaRisk Section in Response
-```json
-{
-  "metaRisk": {
-    "posture": "DEFENSIVE",
-    "globalScale": 0.816,
-    "maxOverrideCap": 0.6,
-    "intensityBefore": 0.331,
-    "intensityAfter": 0.331,
-    "shrinkApplied": false,
-    "tailRiskClamp": false
-  }
-}
-```
-
-### Test Gates (ALL PASSED)
-- ✅ Shrink applied when intensity > cap
-- ✅ Sign preservation (direction preserved)
-- ✅ TAIL no risk increase
-- ✅ No NaN
-- ✅ Allocations sum = 1.0 ± 0.001
-- ✅ Crash-test resilienceScore = 1.0
-
-### Crash-Test Results
-| Mode | maxOverride | Status |
-|------|-------------|--------|
-| NORMAL | 0.331 | ✅ |
-| COVID_CRASH | 0.331 | ✅ |
-| 2008_STYLE | 0.522 | ✅ |
-| USD_SPIKE | 0.331 | ✅ |
-| LIQUIDITY_FREEZE | 0.404 | ✅ |
-| DETERMINISM | 0 | ✅ |
-
-**Final Grade: PRODUCTION**
-**Resilience Score: 1.0**
-
-### Files Modified
-- `engine_global_brain_bridge.service.ts` - MetaRisk integration
-- `brain_bridge.service.ts` - NEW: shrink logic + globalScale
-- `stress_simulation.service.ts` - Normalized allocations
-- `brain_compare.service.ts` - Normalized allocations
-
-### Next: P11 — Capital Allocation Optimizer
-
-## P11 — Capital Allocation Optimizer (IMPLEMENTED 2026-02-27)
-
-### Philosophy
-- **NOT a replacement for Brain** — small deltas wrapper
-- Max delta = 0.15 (base), 0.08 (defensive), 0.10 (TAIL risk-down only)
-- Always explainable, safety-first
-
-### Formula
-```
-score = expectedTilt - tailPenalty - corrPenalty - guardPenalty
-delta = clamp(score * K, -maxDelta, +maxDelta)
-
-Where:
-- expectedTilt = mean * W_RETURN (1.0)
-- tailPenalty = abs(q05) * W_TAIL (1.2)
-- corrPenalty = contagionScore * W_CORR (0.8)
-- guardPenalty = DEFENSIVE ? W_GUARD (0.6) : 0
-```
-
-### Safety Constraints
-| Constraint | Rule |
-|------------|------|
-| TAIL | deltas ≤ 0 (only risk reduction) |
-| RISK_OFF_SYNC | btcDelta ≤ spxDelta |
-| DEFENSIVE | maxDelta = 0.08 |
-| MIN_CASH | 0.05 |
-
-### Acceptance Gate Results
-| Metric | Value |
-|--------|-------|
-| maxDeltaAllowed | 0.08 |
-| maxDeltaAbs | 0.08 |
-| overrideIntensity (before/after) | 0 / 0 |
-| resilienceScore | 1.0 |
-
-### Allocations Comparison
-| Mode | SPX | BTC | Cash |
-|------|-----|-----|------|
-| brain=1 | 0.318 | 0.328 | 0.354 |
-| brain=1&optimizer=1 | 0.238 | 0.248 | 0.514 |
-
-**Optimizer reduced risk by 0.16 in favor of cash**
-
-### API Endpoints
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| /api/brain/v2/optimizer/preview | GET | Preview deltas |
-| /api/brain/v2/optimizer/schema | GET | Schema docs |
-| /api/brain/v2/optimizer/simulate | POST | Test with custom inputs |
-| /api/engine/global?brain=1&optimizer=1 | GET | Full pipeline |
-
-### Test Gates (ALL PASSED)
-- ✅ Determinism
-- ✅ Sum = 1.0
-- ✅ No NaN
-- ✅ Delta within cap
-- ✅ TAIL → deltas ≤ 0
-- ✅ RISK_OFF_SYNC → btcDelta ≤ spxDelta
-- ✅ DEFENSIVE → maxDelta = 0.08
-- ✅ cashDelta = -(spxDelta + btcDelta)
-
-### Crash-Test
-**Resilience Score: 1.0 | Grade: PRODUCTION**
-
-### Next: P12 — Adaptive Coefficient Learning
+Last Updated: 2026-02-28
