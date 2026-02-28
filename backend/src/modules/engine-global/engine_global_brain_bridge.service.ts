@@ -49,10 +49,11 @@ export interface MetaRiskSection {
 }
 
 export interface OverrideIntensitySection {
-  brain: number;      // Intensity from Brain directives
-  optimizer: number;  // Intensity from Optimizer deltas
-  total: number;      // Combined intensity
-  cap: number;        // Current cap
+  brain: number;           // Intensity from Brain directives (caps/haircuts/scales)
+  metaRiskScale: number;   // Intensity from MetaRisk globalScale
+  optimizer: number;       // Intensity from Optimizer deltas
+  total: number;           // Total intensity (base → final)
+  cap: number;             // Current cap (0.35 BASE/RISK, 0.60 TAIL)
   withinCap: boolean;
 }
 
