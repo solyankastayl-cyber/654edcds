@@ -126,7 +126,7 @@ class BrainScenarioSanityService {
     const { spreadNorm, downNorm } = this.normalizeMetrics(input);
     
     // Step 2: Apply priors blend
-    const afterPriors = this.blendWithPriors(rawProbs);
+    const afterPriors = this.blendWithPriors(rawProbs, input);
     
     // Step 3: TAIL + RISK Eligibility Gates (FIX #2)
     const { probs: afterGate, passed: gatePassed, reasons, gateDiag } = this.applyTailGate(afterPriors, input);
