@@ -16,10 +16,12 @@ import { getBrainOverrideApplyService } from '../brain/services/brain_override_a
 import { getMetaRiskService } from '../brain/services/meta_risk.service.js';
 import { getOptimizerService } from '../brain/optimizer/optimizer.service.js';
 import { getRegimeMemoryService } from '../brain/services/regime_memory.service.js';
+import { getAdaptiveService } from '../brain/adaptive/adaptive.service.js';
 import { applyBrainBridge, validateBridgeOutput } from './brain_bridge.service.js';
 import type { EngineGlobalResponse, EngineAllocation } from './engine_global.contract.js';
 import type { BrainOutputPack } from '../brain/contracts/brain_output.contract.js';
 import type { OptimizerOutput, OptimizerInput } from '../brain/optimizer/optimizer.contract.js';
+import type { AdaptiveMode } from '../brain/adaptive/adaptive.contract.js';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
