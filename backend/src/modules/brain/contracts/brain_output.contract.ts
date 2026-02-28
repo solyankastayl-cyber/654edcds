@@ -18,6 +18,21 @@ export interface ScenarioPack {
   description?: string;
 }
 
+// P12.0: Scenario Diagnostics for explainability
+export interface ScenarioDiagnostics {
+  rawProbabilities: Record<ScenarioName, number>;
+  afterPriors: Record<ScenarioName, number>;
+  afterGate: Record<ScenarioName, number>;
+  afterPenalty: Record<ScenarioName, number>;
+  afterTemperature: Record<ScenarioName, number>;
+  appliedTemperature: number;
+  eligibilityGatePassed: boolean;
+  tailEligibilityReasons: string[];
+  tailRateRolling: number;
+  concentration: number;
+  scenarioPriorPenalty: number;
+}
+
 export interface HorizonForecast {
   mean?: number;
   q05?: number;
