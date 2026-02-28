@@ -239,8 +239,8 @@ export class AdaptiveService {
     const avgDelta = deltas.reduce((a, b) => a + b, 0) / n;
     const minDelta = deltas.length > 0 ? Math.min(...deltas) : 0;
     const maxDelta = deltas.length > 0 ? Math.max(...deltas) : 0;
-    const avgIntensity = totalIntensity / n;
-    const maxIntensity = deltas.length > 0 ? Math.max(...deltas.map(Math.abs)) : 0;
+    const avgIntensity = intensities.length > 0 ? intensities.reduce((a, b) => a + b, 0) / n : 0;
+    const maxIntensity = intensities.length > 0 ? Math.max(...intensities) : 0;
     
     // Calculate stability (variance of deltas)
     const variance = deltas.reduce((sum, d) => sum + Math.pow(d - avgDelta, 2), 0) / n;
