@@ -326,6 +326,7 @@ export async function getEngineGlobalWithBrain(params: {
       decision: brainDecision,
       metaRisk: bridgeResult.metaRisk,
       overrideIntensity,
+      adaptive: adaptiveSection,
       bridgeSteps: bridgeResult.steps,
       warnings: bridgeResult.warnings,
       optimizer: optimizerResult,
