@@ -312,7 +312,7 @@ class BrainScenarioSanityService {
   }
   
   // ─────────────────────────────────────────────────────────────────
-  // STEP 4: Tail rate penalty (anti-collapse)
+  // STEP 4: Tail rate penalty (anti-collapse) - FIX #5: raised triggers
   // ─────────────────────────────────────────────────────────────────
   
   private applyTailRatePenalty(
@@ -321,10 +321,11 @@ class BrainScenarioSanityService {
   ): { probs: Record<ScenarioName, number>; penalty: number } {
     let penalty = 1.0;
     
-    if (tailRateRolling > THRESHOLDS.tail_rate_threshold_50) {
-      penalty = THRESHOLDS.tail_rate_penalty_50;
-    } else if (tailRateRolling > THRESHOLDS.tail_rate_threshold_35) {
-      penalty = THRESHOLDS.tail_rate_penalty_35;
+    // FIX #5: Raised triggers from 35%/50% to 45%/65%
+    if (tailRateRolling > THRESHOLDS.tail_rate_threshold_65) {
+      penalty = THRESHOLDS.tail_rate_penalty_65;
+    } else if (tailRateRolling > THRESHOLDS.tail_rate_threshold_45) {
+      penalty = THRESHOLDS.tail_rate_penalty_45;
     }
     
     if (penalty < 1.0) {
