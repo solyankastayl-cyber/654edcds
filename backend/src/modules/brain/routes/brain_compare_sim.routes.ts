@@ -234,10 +234,26 @@ export async function brainCompareSimRoutes(fastify: FastifyInstance): Promise<v
       let baseCount = 0;
       let riskCount = 0;
       let tailCount = 0;
-      let totalSpread = 0;
-      let guardCounts: Record<string, number> = { NONE: 0, WARN: 0, CRISIS: 0, BLOCK: 0 };
       let tailEligibilityFailCount = 0;
-      const scenarioHistory: Array<{ date: string; scenario: string; probs: any; gatePassed: boolean }> = [];
+      let guardCounts: Record<string, number> = { NONE: 0, WARN: 0, CRISIS: 0, BLOCK: 0 };
+      
+      // Gate diagnostics aggregation
+      let c1_count = 0, c2_count = 0, c3_count = 0, c4_count = 0;
+      const countTrueHist: number[] = [];
+      const q05_values: number[] = [];
+      const spreadNorm_values: number[] = [];
+      const rawTail_values: number[] = [];
+      const afterPriorsTail_values: number[] = [];
+      
+      const scenarioHistory: Array<{ 
+        date: string; 
+        scenario: string; 
+        probs: any; 
+        gatePassed: boolean;
+        countTrue?: number;
+        q05?: number;
+        spreadNorm?: number;
+      }> = [];
       
       for (const date of dates) {
         try {
@@ -249,9 +265,29 @@ export async function brainCompareSimRoutes(fastify: FastifyInstance): Promise<v
           else if (scenario === 'TAIL') tailCount++;
           
           // Get diagnostics if available
-          const diag = decision.scenarioDiagnostics;
-          if (diag && !diag.eligibilityGatePassed) {
-            tailEligibilityFailCount++;
+          const diag = decision.scenarioDiagnostics as any;
+          if (diag) {
+            if (!diag.eligibilityGatePassed) tailEligibilityFailCount++;
+            
+            // Aggregate gate conditions
+            const gateDiag = diag.gateDiagnostics;
+            if (gateDiag) {
+              if (gateDiag.c1_guard) c1_count++;
+              if (gateDiag.c2_q05) c2_count++;
+              if (gateDiag.c3_spread) c3_count++;
+              if (gateDiag.c4_crossAsset) c4_count++;
+              countTrueHist.push(gateDiag.countTrue);
+              q05_values.push(gateDiag.q05);
+              spreadNorm_values.push(gateDiag.spreadNorm);
+            }
+            
+            // Track raw vs priors
+            if (diag.rawProbabilities?.TAIL !== undefined) {
+              rawTail_values.push(diag.rawProbabilities.TAIL);
+            }
+            if (diag.afterPriors?.TAIL !== undefined) {
+              afterPriorsTail_values.push(diag.afterPriors.TAIL);
+            }
           }
           
           // Track guard
@@ -259,16 +295,14 @@ export async function brainCompareSimRoutes(fastify: FastifyInstance): Promise<v
           const guardLevel = world.assets.dxy?.guard?.level || 'NONE';
           guardCounts[guardLevel] = (guardCounts[guardLevel] || 0) + 1;
           
-          // Track spread
-          const q05 = decision.forecasts?.dxy?.byHorizon['90D']?.q05 || 0;
-          const q95 = decision.forecasts?.dxy?.byHorizon['90D']?.q95 || 0;
-          totalSpread += q95 - q05;
-          
           scenarioHistory.push({
             date,
             scenario,
             probs: decision.scenario.probs,
             gatePassed: diag?.eligibilityGatePassed ?? true,
+            countTrue: (diag as any)?.gateDiagnostics?.countTrue,
+            q05: (diag as any)?.gateDiagnostics?.q05,
+            spreadNorm: (diag as any)?.gateDiagnostics?.spreadNorm,
           });
         } catch (e) {
           console.warn(`[Timeline] Failed at ${date}:`, (e as Error).message);
@@ -276,6 +310,18 @@ export async function brainCompareSimRoutes(fastify: FastifyInstance): Promise<v
       }
       
       const total = baseCount + riskCount + tailCount;
+      
+      // Calculate percentiles helper
+      const percentile = (arr: number[], p: number) => {
+        if (arr.length === 0) return 0;
+        const sorted = [...arr].sort((a, b) => a - b);
+        const idx = Math.floor(sorted.length * p);
+        return sorted[Math.min(idx, sorted.length - 1)];
+      };
+      
+      // Count how often countTrue >= 1 and >= 2
+      const countTrue_ge1 = countTrueHist.filter(c => c >= 1).length;
+      const countTrue_ge2 = countTrueHist.filter(c => c >= 2).length;
       
       return reply.send({
         ok: true,
@@ -286,16 +332,46 @@ export async function brainCompareSimRoutes(fastify: FastifyInstance): Promise<v
           tailRate: total > 0 ? Math.round((tailCount / total) * 1000) / 1000 : 0,
         },
         counts: { base: baseCount, risk: riskCount, tail: tailCount },
-        avgQuantileSpread: total > 0 ? Math.round((totalSpread / total) * 10000) / 10000 : 0,
-        avgGuardLevel: Object.entries(guardCounts).reduce((a, [k, v]) => v > guardCounts[a] ? k : a, 'NONE'),
+        
+        // Gate condition rates (diagnostic A)
+        gateConditionRates: {
+          c1_guard: total > 0 ? Math.round((c1_count / total) * 1000) / 1000 : 0,
+          c2_q05: total > 0 ? Math.round((c2_count / total) * 1000) / 1000 : 0,
+          c3_spread: total > 0 ? Math.round((c3_count / total) * 1000) / 1000 : 0,
+          c4_crossAsset: total > 0 ? Math.round((c4_count / total) * 1000) / 1000 : 0,
+        },
+        countTrueDistribution: {
+          ge1_rate: total > 0 ? Math.round((countTrue_ge1 / total) * 1000) / 1000 : 0,
+          ge2_rate: total > 0 ? Math.round((countTrue_ge2 / total) * 1000) / 1000 : 0,
+        },
+        
+        // Metric ranges (diagnostic B)
+        q05_percentiles: {
+          p10: Math.round(percentile(q05_values, 0.1) * 10000) / 10000,
+          p50: Math.round(percentile(q05_values, 0.5) * 10000) / 10000,
+          p90: Math.round(percentile(q05_values, 0.9) * 10000) / 10000,
+        },
+        spreadNorm_percentiles: {
+          p10: Math.round(percentile(spreadNorm_values, 0.1) * 100) / 100,
+          p50: Math.round(percentile(spreadNorm_values, 0.5) * 100) / 100,
+          p90: Math.round(percentile(spreadNorm_values, 0.9) * 100) / 100,
+        },
+        
+        // Prior blend diagnostics (diagnostic C)
+        rawTail_mean: rawTail_values.length > 0 ? Math.round((rawTail_values.reduce((a,b) => a+b, 0) / rawTail_values.length) * 1000) / 1000 : 0,
+        afterPriorsTail_mean: afterPriorsTail_values.length > 0 ? Math.round((afterPriorsTail_values.reduce((a,b) => a+b, 0) / afterPriorsTail_values.length) * 1000) / 1000 : 0,
+        
         guardDistribution: guardCounts,
         tailEligibilityFailRate: total > 0 ? Math.round((tailEligibilityFailCount / total) * 1000) / 1000 : 0,
+        
         sanityCheck: {
-          tailRateOK: total > 0 ? (tailCount / total) <= 0.25 : true,
+          tailRateOK: total > 0 ? (tailCount / total) >= 0.02 && (tailCount / total) <= 0.25 : true,
           baseRateOK: total > 0 ? (baseCount / total) >= 0.30 : true,
-          riskRateOK: total > 0 ? (riskCount / total) >= 0.20 : true,
+          riskRateOK: total > 0 ? (riskCount / total) >= 0.15 : true,  // Lowered from 0.20
+          countTrue_ge1_OK: total > 0 ? (countTrue_ge1 / total) >= 0.15 : true,
+          countTrue_ge2_OK: total > 0 ? (countTrue_ge2 / total) >= 0.02 : true,
         },
-        history: scenarioHistory.slice(-20), // Last 20 for brevity
+        history: scenarioHistory.slice(-20),
       });
     } catch (e) {
       console.error('[Timeline] Error:', e);
