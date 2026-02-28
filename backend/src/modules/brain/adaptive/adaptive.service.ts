@@ -195,6 +195,7 @@ export class AdaptiveService {
     const compareService = getBrainCompareService();
     
     const deltas: number[] = [];
+    const intensities: number[] = [];
     let flipCount = 0;
     let totalIntensity = 0;
     let degradationCount = 0;
