@@ -61,6 +61,10 @@ export interface SanityInput {
   q05: number;
   q50: number;
   q95: number;
+  mean: number;              // For spreadNorm calculation
+  
+  // Volatility (for better spreadNorm - FIX #3)
+  realizedVol?: number;      // 20d or 60d realized vol
   
   // Context
   guardLevel: GuardLevel;
@@ -71,12 +75,26 @@ export interface SanityInput {
   
   // Raw probabilities from quantile rules
   rawProbs: Record<ScenarioName, number>;
+  
+  // Risk score for RISK gate (FIX #2)
+  riskScore?: number;
 }
 
 export interface SanityOutput {
   finalProbs: Record<ScenarioName, number>;
   finalScenario: ScenarioName;
   diagnostics: ScenarioDiagnostics;
+}
+
+// Diagnostic data for timeline endpoint
+export interface GateDiagnostics {
+  c1_guard: boolean;
+  c2_q05: boolean;
+  c3_spread: boolean;
+  c4_crossAsset: boolean;
+  countTrue: number;
+  q05: number;
+  spreadNorm: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════
