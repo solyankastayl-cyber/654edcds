@@ -91,6 +91,203 @@ export class AdaptiveService {
     return runId;
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // TWO-PHASE TUNING (Optimized: Quick Filter → Deep Validation)
+  // ═══════════════════════════════════════════════════════════════
+
+  async runTwoPhase(request: TuningRunRequest): Promise<string> {
+    const { asset, start, end, steps, mode } = request;
+    const runId = `twophase_${asset}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    
+    // Create run record
+    await TuningRunModel.create({
+      runId,
+      asset,
+      start,
+      end,
+      steps,
+      mode,
+      status: 'running',
+      phase: 'filter',
+      startedAt: new Date(),
+    });
+    
+    console.log(`[Adaptive] Starting TWO-PHASE tuning ${runId} for ${asset}`);
+    
+    // Run async
+    this.executeTwoPhase(runId, request).catch(e => {
+      console.error(`[Adaptive] Two-phase ${runId} failed:`, e);
+      TuningRunModel.updateOne({ runId }, { $set: { status: 'failed' } }).exec();
+    });
+    
+    return runId;
+  }
+
+  private async executeTwoPhase(runId: string, request: TuningRunRequest): Promise<void> {
+    const { asset, start, end, steps, mode } = request;
+    const currentParams = await this.getParams(asset);
+    
+    // ═══════════════════════════════════════════════════════════
+    // PHASE A: Quick Filter (5 steps, 8 candidates)
+    // Goal: eliminate 70% of weak combinations
+    // ═══════════════════════════════════════════════════════════
+    
+    console.log(`[Adaptive] PHASE A: Quick Filter (5 steps, 8 candidates)`);
+    await TuningRunModel.updateOne({ runId }, { $set: { phase: 'filter' } });
+    
+    const filterSteps = 5;  // Quick evaluation
+    const filterCandidates = this.generateSmartCandidates(currentParams, 8);
+    
+    // Evaluate baseline with quick steps
+    const baselineMetrics = await this.evaluateParams(currentParams, start, end, filterSteps);
+    const baseline = {
+      params: currentParams,
+      score: this.computeScore(baselineMetrics),
+      metrics: baselineMetrics,
+    };
+    
+    // Evaluate filter candidates
+    const filterResults: Array<{ params: AdaptiveParams; score: number; metrics: TuningMetrics }> = [];
+    
+    for (let i = 0; i < filterCandidates.length; i++) {
+      try {
+        const metrics = await this.evaluateParams(filterCandidates[i], start, end, filterSteps);
+        const score = this.computeScore(metrics);
+        filterResults.push({ params: filterCandidates[i], score, metrics });
+        console.log(`[Adaptive] Filter ${i+1}/${filterCandidates.length}: score=${score.toFixed(3)}`);
+      } catch (e) {
+        console.warn(`[Adaptive] Filter candidate ${i} failed:`, (e as Error).message);
+      }
+    }
+    
+    // Select top 3 candidates
+    filterResults.sort((a, b) => b.score - a.score);
+    const top3 = filterResults.slice(0, 3);
+    
+    console.log(`[Adaptive] PHASE A Complete. Top 3 scores: ${top3.map(c => c.score.toFixed(3)).join(', ')}`);
+    
+    // ═══════════════════════════════════════════════════════════
+    // PHASE B: Deep Validation (full steps on top 3 only)
+    // ═══════════════════════════════════════════════════════════
+    
+    console.log(`[Adaptive] PHASE B: Deep Validation (${steps} steps, top 3 candidates)`);
+    await TuningRunModel.updateOne({ runId }, { $set: { phase: 'deep' } });
+    
+    let best = baseline;
+    
+    for (let i = 0; i < top3.length; i++) {
+      try {
+        const metrics = await this.evaluateParams(top3[i].params, start, end, steps);
+        const score = this.computeScore(metrics);
+        console.log(`[Adaptive] Deep ${i+1}/3: score=${score.toFixed(3)}, hitRate=${metrics.avgDeltaHitRatePp.toFixed(2)}pp`);
+        
+        if (score > best.score) {
+          best = { params: top3[i].params, score, metrics };
+          console.log(`[Adaptive] New best found: ${score.toFixed(3)}`);
+        }
+      } catch (e) {
+        console.warn(`[Adaptive] Deep candidate ${i} failed:`, (e as Error).message);
+      }
+    }
+    
+    // Apply smoothing if best != baseline
+    let finalParams = currentParams;
+    if (best.params.versionId !== currentParams.versionId) {
+      finalParams = this.smoothParams(currentParams, best.params);
+      finalParams.versionId = `adaptive_${asset}_${new Date().toISOString()}`;
+      finalParams.source = 'tuned';
+    }
+    
+    // Evaluate gates
+    const gates = this.evaluateGates(best.metrics, currentParams.gates);
+    
+    // Build report with extended metrics
+    const report = {
+      runId,
+      asset,
+      start,
+      end,
+      steps,
+      mode,
+      status: 'complete' as const,
+      startedAt: (await TuningRunModel.findOne({ runId }))?.startedAt?.toISOString() || new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      baseline,
+      best: {
+        params: finalParams,
+        score: best.score,
+        metrics: best.metrics,
+      },
+      candidatesEvaluated: filterCandidates.length + 3,
+      phases: {
+        filter: { candidates: filterCandidates.length, steps: filterSteps },
+        deep: { candidates: 3, steps },
+      },
+      gates,
+      recommendation: gates.passed ? 'promote' : (best.score > baseline.score ? 'review' : 'reject'),
+    };
+    
+    // Save report
+    await TuningRunModel.updateOne(
+      { runId },
+      { $set: { status: 'complete', completedAt: new Date(), report } }
+    );
+    
+    // If mode=on and gates passed, auto-promote
+    if (mode === 'on' && gates.passed) {
+      console.log(`[Adaptive] Auto-promoting params for ${asset}`);
+      await this.promote(asset, finalParams.versionId);
+    }
+    
+    console.log(`[Adaptive] Two-phase ${runId} complete. Recommendation: ${report.recommendation}`);
+  }
+
+  // Smart candidate generation (focused, not brute-force)
+  private generateSmartCandidates(base: AdaptiveParams, count: number): AdaptiveParams[] {
+    const candidates: AdaptiveParams[] = [];
+    
+    // Key tuning: K (strength) variations
+    for (const kMult of [0.85, 0.95, 1.05, 1.15]) {
+      candidates.push({
+        ...base,
+        versionId: `smart_K_${kMult}`,
+        optimizer: { ...base.optimizer, K: clamp(base.optimizer.K * kMult, 0.1, 0.5) },
+      });
+    }
+    
+    // wTail variations
+    for (const wTailMult of [0.9, 1.1]) {
+      candidates.push({
+        ...base,
+        versionId: `smart_wTail_${wTailMult}`,
+        optimizer: { ...base.optimizer, wTail: clamp(base.optimizer.wTail * wTailMult, 0.5, 2.0) },
+      });
+    }
+    
+    // Combined K + wTail
+    candidates.push({
+      ...base,
+      versionId: 'smart_conservative',
+      optimizer: {
+        ...base.optimizer,
+        K: clamp(base.optimizer.K * 0.9, 0.1, 0.5),
+        wTail: clamp(base.optimizer.wTail * 1.1, 0.5, 2.0),
+      },
+    });
+    
+    candidates.push({
+      ...base,
+      versionId: 'smart_aggressive',
+      optimizer: {
+        ...base.optimizer,
+        K: clamp(base.optimizer.K * 1.1, 0.1, 0.5),
+        wTail: clamp(base.optimizer.wTail * 0.9, 0.5, 2.0),
+      },
+    });
+    
+    return candidates.slice(0, count);
+  }
+
   private async executeTuning(runId: string, request: TuningRunRequest): Promise<void> {
     const { asset, start, end, steps, mode, gridSize = 3 } = request;
     
