@@ -93,6 +93,7 @@ export class BrainCompareService {
     // 7. Extract override intensity breakdown
     const overrideIntensity = (engineOnOpt as any).brain?.overrideIntensity || {
       brain: 0,
+      metaRiskScale: 0,
       optimizer: 0,
       total: 0,
       cap: 0.35,
