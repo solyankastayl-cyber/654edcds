@@ -10,6 +10,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getBrainCompareService } from '../services/brain_compare.service.js';
 import { getBrainSimulationService } from '../services/brain_simulation.service.js';
+import { getWorldStateService } from '../services/world_state.service.js';
+import { getBrainOrchestratorService } from '../services/brain_orchestrator.service.js';
 
 // In-memory store for sim reports (could be MongoDB)
 const simReports = new Map<string, any>();
