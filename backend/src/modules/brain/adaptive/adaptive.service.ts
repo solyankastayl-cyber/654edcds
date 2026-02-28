@@ -204,9 +204,15 @@ export class AdaptiveService {
         const asOf = dates[i];
         const comparison = await compareService.compare(asOf);
         
-        // Delta = difference between brain ON and OFF
-        const delta = comparison.diff?.delta?.spx || 0;
+        // Delta = difference between brain ON and OFF (from allocationsDelta)
+        const spxDelta = comparison.diff?.allocationsDelta?.spx || 0;
+        const btcDelta = comparison.diff?.allocationsDelta?.btc || 0;
+        const delta = Math.max(Math.abs(spxDelta), Math.abs(btcDelta));
         deltas.push(delta);
+        
+        // Get override intensity from compare response
+        const intensity = comparison.diff?.overrideIntensity?.total || 0;
+        intensities.push(intensity);
         
         // Count flips (direction changes)
         if (i > 0) {
@@ -216,8 +222,8 @@ export class AdaptiveService {
           }
         }
         
-        // Track intensity
-        totalIntensity += Math.abs(delta);
+        // Track intensity (use actual override intensity)
+        totalIntensity += intensity;
         
         // Track degradation (if delta is negative = Brain hurt performance)
         if (delta < params.gates.maxDegradationPp / 100) {
