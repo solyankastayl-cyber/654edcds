@@ -239,14 +239,20 @@ export function computeForecastScenario(
   if (!options?.skipSanity) {
     const sanityService = getBrainScenarioSanityService();
     
+    // Get mean from forecast for spreadNorm calculation
+    const mean_90d = forecast.byHorizon['90D']?.mean ?? forecast.byHorizon['180D']?.mean ?? 0;
+    
     const sanityInput: SanityInput = {
       q05: q05_90d,
       q50: q50_90d,
       q95: q95_90d,
+      mean: mean_90d,
+      realizedVol: vol20d,  // Use realized vol for better spreadNorm
       guardLevel,
       crossAssetRegime,
       tailRateRolling: getTailRateRolling(),
       rawProbs,
+      riskScore,  // Pass riskScore for RISK gate
     };
     
     const sanityOutput = sanityService.applySanity(sanityInput);
