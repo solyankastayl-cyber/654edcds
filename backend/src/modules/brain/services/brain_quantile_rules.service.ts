@@ -27,7 +27,9 @@ import {
   ScenarioName,
   BrainDirectives,
   RiskMode,
+  ScenarioDiagnostics,
 } from '../contracts/brain_output.contract.js';
+import { getBrainScenarioSanityService, SanityInput } from './brain_scenario_sanity.service.js';
 
 // ═══════════════════════════════════════════════════════════════
 // THRESHOLDS
