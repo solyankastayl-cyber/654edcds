@@ -164,15 +164,27 @@ class BrainScenarioSanityService {
   }
   
   // ─────────────────────────────────────────────────────────────────
-  // STEP 1: Normalize metrics
+  // STEP 1: Normalize metrics (FIX #3: better spreadNorm)
   // ─────────────────────────────────────────────────────────────────
   
   private normalizeMetrics(input: SanityInput): { spreadNorm: number; downNorm: number } {
-    const { q05, q50, q95 } = input;
+    const { q05, q50, q95, mean, realizedVol } = input;
     
     // Spread (width of uncertainty)
     const spread = q95 - q05;
-    const spreadNorm = spread / (Math.abs(q50) + 0.04); // 0.04 floor to avoid division issues
+    
+    // FIX #3: Use realizedVol for better spreadNorm
+    // Priority: realizedVol > abs(mean) > abs(q50)
+    let denominator: number;
+    if (realizedVol && realizedVol > 0.01) {
+      denominator = realizedVol + 0.02;
+    } else if (mean !== undefined) {
+      denominator = Math.abs(mean) + 0.03;
+    } else {
+      denominator = Math.abs(q50) + 0.04;
+    }
+    
+    const spreadNorm = spread / denominator;
     
     // Downside severity
     const down = Math.max(0, -q05);
