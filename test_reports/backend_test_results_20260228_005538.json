@@ -1,0 +1,101 @@
+{
+  "summary": {
+    "tests_run": 9,
+    "tests_passed": 9,
+    "success_rate": 100.0,
+    "timestamp": "2026-02-28T00:55:38.311859",
+    "backend_url": "https://spx-bitcoin-module-1.preview.emergentagent.com"
+  },
+  "results": [
+    {
+      "test": "Health Check",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:54:59.618299",
+      "error": null,
+      "response_summary": {
+        "status": "ok"
+      }
+    },
+    {
+      "test": "P12 Adaptive Schema",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:54:59.747044",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    },
+    {
+      "test": "P12 Adaptive Params DXY",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:54:59.896200",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    },
+    {
+      "test": "Engine Global Brain+Optimizer",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:55:11.539882",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    },
+    {
+      "test": "Brain Compare",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:55:37.239320",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    },
+    {
+      "test": "Adaptive History DXY",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:55:37.485085",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    },
+    {
+      "test": "Engine Global Baseline",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:55:37.637351",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    },
+    {
+      "test": "Brain v2 Status",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:55:37.790639",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    },
+    {
+      "test": "Cross-Asset Regime",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2026-02-28T00:55:38.310956",
+      "error": null,
+      "response_summary": {
+        "ok": true
+      }
+    }
+  ]
+}
