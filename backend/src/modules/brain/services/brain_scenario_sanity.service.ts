@@ -412,8 +412,13 @@ class BrainScenarioSanityService {
   }
   
   private selectScenario(probs: Record<ScenarioName, number>): ScenarioName {
-    if (probs.TAIL >= probs.RISK && probs.TAIL >= probs.BASE) return 'TAIL';
-    if (probs.RISK >= probs.BASE) return 'RISK';
+    // TAIL threshold: if TAIL >= 25%, select TAIL
+    if (probs.TAIL >= 0.25) return 'TAIL';
+    
+    // RISK threshold: if RISK >= 30% (and TAIL < 25%), select RISK  
+    if (probs.RISK >= 0.30) return 'RISK';
+    
+    // Otherwise BASE
     return 'BASE';
   }
   
