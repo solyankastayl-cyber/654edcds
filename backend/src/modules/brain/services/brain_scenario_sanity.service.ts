@@ -217,59 +217,98 @@ class BrainScenarioSanityService {
   
   // ─────────────────────────────────────────────────────────────────
   // STEP 3: TAIL Eligibility Gate (2 of 4 conditions)
+  //         + RISK Gate (1 of 4 OR riskScore) per FIX #2
   // ─────────────────────────────────────────────────────────────────
   
   private applyTailGate(
     probs: Record<ScenarioName, number>,
     input: SanityInput
-  ): { probs: Record<ScenarioName, number>; passed: boolean; reasons: string[] } {
-    const { q05, guardLevel, crossAssetRegime } = input;
+  ): { probs: Record<ScenarioName, number>; passed: boolean; reasons: string[]; gateDiag: GateDiagnostics } {
+    const { q05, guardLevel, crossAssetRegime, riskScore } = input;
     const { spreadNorm } = this.normalizeMetrics(input);
     
     const reasons: string[] = [];
-    let conditionsMet = 0;
     
-    // C1: Guard hard (CRISIS or BLOCK)
-    if (THRESHOLDS.guard_levels_tail.includes(guardLevel)) {
-      conditionsMet++;
-      reasons.push(`C1: guardLevel=${guardLevel} (CRISIS/BLOCK)`);
+    // Check all 4 conditions
+    const c1 = THRESHOLDS.guard_levels_tail.includes(guardLevel);
+    const c2 = q05 <= THRESHOLDS.q05_hard_tail;
+    const c3 = spreadNorm >= THRESHOLDS.spread_norm_tail;
+    const c4 = crossAssetRegime ? THRESHOLDS.cross_asset_risk_off.includes(crossAssetRegime) : false;
+    
+    const conditionsMet = [c1, c2, c3, c4].filter(Boolean).length;
+    
+    // Log reasons
+    if (c1) reasons.push(`C1: guardLevel=${guardLevel} (CRISIS/BLOCK)`);
+    if (c2) reasons.push(`C2: q05=${(q05 * 100).toFixed(2)}% <= -2%`);
+    if (c3) reasons.push(`C3: spreadNorm=${spreadNorm.toFixed(2)} >= 1.10`);
+    if (c4) reasons.push(`C4: crossAsset=${crossAssetRegime} (risk-off)`);
+    
+    const gateDiag: GateDiagnostics = {
+      c1_guard: c1,
+      c2_q05: c2,
+      c3_spread: c3,
+      c4_crossAsset: c4,
+      countTrue: conditionsMet,
+      q05,
+      spreadNorm,
+    };
+    
+    // TAIL gate: need ≥2 conditions
+    const tailPassed = conditionsMet >= THRESHOLDS.tail_gate_min_conditions;
+    
+    // RISK gate: need ≥1 condition OR riskScore >= 0.45 (FIX #2)
+    const riskPassed = conditionsMet >= THRESHOLDS.risk_gate_min_conditions || 
+                       (riskScore !== undefined && riskScore >= THRESHOLDS.risk_score_threshold);
+    
+    // Apply cascading gates: TAIL → RISK → BASE
+    if (!tailPassed && probs.TAIL > 0.05) {
+      // TAIL not allowed - redistribute
+      const tailTransfer = probs.TAIL * 0.9;
+      
+      if (riskPassed) {
+        // Fallback TAIL → RISK
+        return {
+          probs: this.normalize({
+            BASE: probs.BASE,
+            RISK: probs.RISK + tailTransfer,
+            TAIL: probs.TAIL * 0.1,
+          }),
+          passed: false,
+          reasons: [...reasons, `TAIL GATE FAILED (${conditionsMet}/4 < 2): fallback to RISK`],
+          gateDiag,
+        };
+      } else {
+        // Both TAIL and RISK not allowed - all to BASE
+        return {
+          probs: this.normalize({
+            BASE: probs.BASE + tailTransfer * 0.7,
+            RISK: probs.RISK + tailTransfer * 0.3,
+            TAIL: probs.TAIL * 0.1,
+          }),
+          passed: false,
+          reasons: [...reasons, `BOTH GATES FAILED: fallback to BASE`],
+          gateDiag,
+        };
+      }
     }
     
-    // C2: Deep downside (q05 <= -3%)
-    if (q05 <= THRESHOLDS.q05_hard_tail) {
-      conditionsMet++;
-      reasons.push(`C2: q05=${(q05 * 100).toFixed(2)}% <= -3%`);
-    }
-    
-    // C3: Wide uncertainty (spreadNorm >= 1.25)
-    if (spreadNorm >= THRESHOLDS.spread_norm_tail) {
-      conditionsMet++;
-      reasons.push(`C3: spreadNorm=${spreadNorm.toFixed(2)} >= 1.25`);
-    }
-    
-    // C4: Cross-asset risk-off
-    if (crossAssetRegime && THRESHOLDS.cross_asset_risk_off.includes(crossAssetRegime)) {
-      conditionsMet++;
-      reasons.push(`C4: crossAsset=${crossAssetRegime} (risk-off)`);
-    }
-    
-    const passed = conditionsMet >= THRESHOLDS.tail_gate_min_conditions;
-    
-    // If gate not passed, downgrade TAIL → RISK
-    if (!passed && probs.TAIL > 0.01) {
-      const tailTransfer = probs.TAIL * 0.8; // Transfer 80% of TAIL to RISK
+    // Check RISK gate for RISK probability
+    if (!riskPassed && probs.RISK > 0.20) {
+      // RISK not strongly justified, dampen slightly
+      const riskDampen = probs.RISK * 0.3;
       return {
-        probs: {
-          BASE: probs.BASE,
-          RISK: probs.RISK + tailTransfer,
-          TAIL: probs.TAIL * 0.2, // Keep 20% as residual
-        },
-        passed,
-        reasons: [...reasons, `GATE FAILED (${conditionsMet}/4 < 2): TAIL downgraded to RISK`],
+        probs: this.normalize({
+          BASE: probs.BASE + riskDampen,
+          RISK: probs.RISK - riskDampen,
+          TAIL: probs.TAIL,
+        }),
+        passed: tailPassed,
+        reasons: [...reasons, `RISK dampened (countTrue=${conditionsMet}, riskScore=${riskScore?.toFixed(2) || 'N/A'})`],
+        gateDiag,
       };
     }
     
-    return { probs, passed, reasons };
+    return { probs, passed: tailPassed, reasons, gateDiag };
   }
   
   // ─────────────────────────────────────────────────────────────────
