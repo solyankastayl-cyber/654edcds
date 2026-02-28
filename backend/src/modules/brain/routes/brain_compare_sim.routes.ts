@@ -311,3 +311,21 @@ function subtractDays(dateStr: string, days: number): string {
   d.setDate(d.getDate() - days);
   return d.toISOString().split('T')[0];
 }
+
+function generateSimDates(start: string, end: string, steps: number): string[] {
+  const dates: string[] = [];
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const totalDays = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+  const stepDays = Math.floor(totalDays / steps);
+  
+  for (let i = 0; i <= steps; i++) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i * stepDays);
+    if (d <= endDate) {
+      dates.push(d.toISOString().split('T')[0]);
+    }
+  }
+  
+  return dates;
+}
