@@ -128,8 +128,8 @@ class BrainScenarioSanityService {
     // Step 2: Apply priors blend
     const afterPriors = this.blendWithPriors(rawProbs);
     
-    // Step 3: TAIL Eligibility Gate (2 of 4)
-    const { probs: afterGate, passed: gatePassed, reasons } = this.applyTailGate(afterPriors, input);
+    // Step 3: TAIL + RISK Eligibility Gates (FIX #2)
+    const { probs: afterGate, passed: gatePassed, reasons, gateDiag } = this.applyTailGate(afterPriors, input);
     
     // Step 4: Tail rate penalty (anti-collapse)
     const { probs: afterPenalty, penalty } = this.applyTailRatePenalty(afterGate, tailRateRolling);
@@ -141,7 +141,7 @@ class BrainScenarioSanityService {
     const finalProbs = this.normalize(afterTemperature);
     const finalScenario = this.selectScenario(finalProbs);
     
-    // Build diagnostics
+    // Build diagnostics with gate info
     const diagnostics: ScenarioDiagnostics = {
       rawProbabilities: rawProbs,
       afterPriors,
@@ -154,7 +154,9 @@ class BrainScenarioSanityService {
       tailRateRolling,
       concentration,
       scenarioPriorPenalty: penalty,
-    };
+      // Add gate diagnostics for timeline analysis
+      gateDiagnostics: gateDiag,
+    } as ScenarioDiagnostics & { gateDiagnostics: GateDiagnostics };
     
     return {
       finalProbs,
