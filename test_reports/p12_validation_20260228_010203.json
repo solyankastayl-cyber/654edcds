@@ -1,0 +1,52 @@
+{
+  "summary": {
+    "tests_run": 3,
+    "tests_passed": 2,
+    "success_rate": 66.66666666666666,
+    "timestamp": "2026-02-28T01:02:03.939817",
+    "backend_url": "https://spx-bitcoin-module-1.preview.emergentagent.com"
+  },
+  "results": [
+    {
+      "test": "Engine Global overrideIntensity",
+      "success": true,
+      "details": {
+        "has_brain": "\u2713 0",
+        "has_metaRiskScale": "\u2713 0.084",
+        "has_optimizer": "\u2713 0.08",
+        "has_total": "\u2713 0.547",
+        "total_value": 0.547,
+        "components_sum": 0.164,
+        "total_calculation": "Real delta from base\u2192final allocations (not sum of components)",
+        "cap": 0.6,
+        "withinCap": true
+      },
+      "timestamp": "2026-02-28T01:01:20.846936",
+      "error": null
+    },
+    {
+      "test": "Brain Compare optimizerDeltaAbs",
+      "success": false,
+      "details": {},
+      "timestamp": "2026-02-28T01:01:51.012471",
+      "error": "HTTPSConnectionPool(host='spx-bitcoin-module-1.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+    },
+    {
+      "test": "Total calculation accuracy",
+      "success": true,
+      "details": {
+        "base_spx": 0.742,
+        "final_spx": 0.209,
+        "actual_spx_delta": 0.533,
+        "base_btc": 0.764,
+        "final_btc": 0.217,
+        "actual_btc_delta": 0.547,
+        "calculated_total_delta": 0.547,
+        "reported_total": 0.547,
+        "total_calculation_check": "\u2713 Match within tolerance (0.001)"
+      },
+      "timestamp": "2026-02-28T01:02:03.939456",
+      "error": null
+    }
+  ]
+}
