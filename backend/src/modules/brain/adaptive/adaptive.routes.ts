@@ -185,6 +185,58 @@ export async function adaptiveRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   // ─────────────────────────────────────────────────────────
+  // POST /api/brain/v2/adaptive/run/fast — Two-Phase Optimized
+  // Phase A: Quick Filter (5 steps, 8 candidates)
+  // Phase B: Deep Validation (full steps, top 3 only)
+  // ─────────────────────────────────────────────────────────
+
+  fastify.post('/api/brain/v2/adaptive/run/fast', async (
+    request: FastifyRequest<{
+      Body: {
+        asset?: string;
+        start?: string;
+        end?: string;
+        steps?: number;
+        mode?: string;
+      }
+    }>,
+    reply: FastifyReply
+  ) => {
+    const body = request.body || {};
+    const now = new Date();
+    
+    const runRequest = {
+      asset: (body.asset || 'dxy') as AssetId,
+      start: body.start || '2024-01-01',
+      end: body.end || now.toISOString().split('T')[0],
+      steps: body.steps || 35,
+      mode: (body.mode || 'shadow') as 'off' | 'shadow' | 'on',
+    };
+    
+    try {
+      const service = getAdaptiveService();
+      const runId = await service.runTwoPhase(runRequest);
+      
+      return reply.send({
+        ok: true,
+        runId,
+        status: 'started',
+        type: 'two-phase',
+        message: 'Two-phase tuning started. Phase A: Quick Filter (5 steps, 8 candidates), Phase B: Deep Validation (full steps, top 3).',
+        estimatedTime: '~40 minutes (vs ~5 hours for full grid)',
+        params: runRequest,
+      });
+    } catch (e) {
+      console.error('[Adaptive] Fast run error:', e);
+      return reply.status(500).send({
+        ok: false,
+        error: 'ADAPTIVE_RUN_ERROR',
+        message: (e as Error).message,
+      });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────
   // GET /api/brain/v2/adaptive/status
   // ─────────────────────────────────────────────────────────
 
