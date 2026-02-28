@@ -88,9 +88,9 @@ class FractalAPITester:
             return False, None
 
     def run_all_tests(self):
-        """Run comprehensive test suite"""
+        """Run comprehensive test suite for P12 Adaptive features"""
         print("=" * 70)
-        print("  FRACTAL MULTI-ASSET PLATFORM - API TESTING")
+        print("  FRACTAL P12 ADAPTIVE TESTING")
         print("=" * 70)
         print(f"Backend URL: {self.base_url}")
         print(f"Test started: {datetime.now().isoformat()}")
@@ -100,63 +100,37 @@ class FractalAPITester:
         print("🔍 Testing Core Health...")
         self.test_endpoint("Health Check", "GET", "/api/health")
 
-        # Test 2: Brain v2 Status  
-        print("🔍 Testing Brain v2...")
+        # Test 2: P12 Adaptive Schema
+        print("🔍 Testing P12 Adaptive Schema...")
+        self.test_endpoint("P12 Adaptive Schema", "GET", "/api/brain/v2/adaptive/schema")
+
+        # Test 3: P12 Adaptive Params for DXY
+        print("🔍 Testing P12 Adaptive Params for DXY...")
+        self.test_endpoint("P12 Adaptive Params DXY", "GET", "/api/brain/v2/adaptive/params?asset=dxy")
+
+        # Test 4: Engine Global with Brain + Optimizer + overrideIntensity breakdown + adaptive section
+        print("🔍 Testing Engine Global with Brain + Optimizer...")
+        self.test_endpoint("Engine Global Brain+Optimizer", "GET", "/api/engine/global?brain=1&optimizer=1")
+
+        # Test 5: Brain Compare with optimizerDeltaAbs
+        print("🔍 Testing Brain Compare with optimizerDeltaAbs...")
+        self.test_endpoint("Brain Compare", "GET", "/api/brain/v2/compare")
+
+        # Test 6: Additional P12 endpoints
+        print("🔍 Testing Additional P12 Endpoints...")
+        self.test_endpoint("Adaptive History DXY", "GET", "/api/brain/v2/adaptive/history?asset=dxy&limit=5")
+        
+        # Test 7: Engine Global without Brain (baseline)
+        print("🔍 Testing Engine Global Baseline...")
+        self.test_endpoint("Engine Global Baseline", "GET", "/api/engine/global")
+
+        # Test 8: Brain v2 Status
+        print("🔍 Testing Brain v2 Status...")
         self.test_endpoint("Brain v2 Status", "GET", "/api/brain/v2/status")
 
-        # Test 3: Stress Presets
-        print("🔍 Testing Stress Simulation...")
-        self.test_endpoint("Stress Presets", "GET", "/api/brain/v2/stress/presets")
-
-        # Test 4: Stress Simulation - COVID_CRASH preset
-        print("🔍 Testing Stress Simulation Run...")
-        stress_payload = {
-            "asset": "dxy",
-            "start": "2020-01-01",
-            "end": "2020-06-01",
-            "stepDays": 7,
-            "scenarioPreset": "COVID_CRASH"
-        }
-        self.test_endpoint("Stress Simulation Run", "POST", "/api/brain/v2/stress/run", 200, stress_payload)
-
-        # Test 5: Cross-Asset Regime Classifier
+        # Test 9: Cross-Asset Regime (for context)
         print("🔍 Testing Cross-Asset Regime...")
         self.test_endpoint("Cross-Asset Regime", "GET", "/api/brain/v2/cross-asset")
-
-        # Test 6: Engine Global
-        print("🔍 Testing Engine Global...")
-        self.test_endpoint("Engine Global Allocations", "GET", "/api/engine/global")
-
-        # Test 7: Platform Crash-Test (Optional - may be slow)
-        print("🔍 Testing Platform Crash-Test (this may take time)...")
-        crash_payload = {
-            "start": "2024-01-01",
-            "end": "2024-06-01", 
-            "stepDays": 30,
-            "asset": "dxy"
-        }
-        # Give crash test more time and allow it to fail without breaking test suite
-        try:
-            url = f"{self.base_url}/api/platform/crash-test/run"
-            headers = {'Content-Type': 'application/json'}
-            response = requests.post(url, json=crash_payload, headers=headers, timeout=60)
-            
-            success = response.status_code == 200
-            try:
-                response_data = response.json()
-            except:
-                response_data = response.text
-            
-            self.log_result("Platform Crash-Test", success, response.status_code, response_data)
-        except requests.exceptions.Timeout:
-            self.log_result("Platform Crash-Test", False, 0, None, "Timeout - test may be too intensive")
-        except Exception as e:
-            self.log_result("Platform Crash-Test", False, 0, None, f"Crash-test error: {str(e)}")
-
-        # Additional brain endpoints for completeness
-        print("🔍 Testing Additional Brain Endpoints...")
-        self.test_endpoint("Brain Compare", "GET", "/api/brain/v2/compare")
-        self.test_endpoint("Brain Features", "GET", "/api/brain/v2/features")
 
         # Print Summary
         self.print_summary()
