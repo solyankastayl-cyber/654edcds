@@ -199,7 +199,7 @@ class BrainScenarioSanityService {
   // STEP 2: Blend with priors (FIX #4: adaptive blend)
   // ─────────────────────────────────────────────────────────────────
   
-  private blendWithPriors(raw: Record<ScenarioName, number>): Record<ScenarioName, number> {
+  private blendWithPriors(raw: Record<ScenarioName, number>, input?: SanityInput): Record<ScenarioName, number> {
     const { priors, prior_blend_default, prior_blend_confident } = THRESHOLDS;
     
     // Calculate concentration to decide blend weight
@@ -208,7 +208,16 @@ class BrainScenarioSanityService {
     const concentration = 1 - entropy / maxEntropy;
     
     // FIX #4: When model is confident, use less prior weight
-    const priorsWeight = concentration > 0.55 ? prior_blend_confident : prior_blend_default;
+    let priorsWeight = concentration > 0.55 ? prior_blend_confident : prior_blend_default;
+    
+    // Additional: if spreadNorm is extremely high (>2.0), increase prior weight
+    // to prevent over-reaction to extreme uncertainty
+    if (input) {
+      const { spreadNorm } = this.normalizeMetrics(input);
+      if (spreadNorm > 2.0) {
+        priorsWeight = Math.min(0.50, priorsWeight + 0.15); // Cap at 50%
+      }
+    }
     
     return {
       BASE: (1 - priorsWeight) * raw.BASE + priorsWeight * priors.BASE,
