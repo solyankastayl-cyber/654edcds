@@ -196,9 +196,13 @@ export class AdaptiveService {
     
     const deltas: number[] = [];
     const intensities: number[] = [];
+    const scenarios: string[] = [];
     let flipCount = 0;
-    let totalIntensity = 0;
     let degradationCount = 0;
+    
+    // Regime-based tracking
+    let lastScenario = '';
+    const flipsByRegime = { base: 0, risk: 0, tail: 0 };
     
     for (let i = 0; i < dates.length; i++) {
       try {
@@ -215,16 +219,22 @@ export class AdaptiveService {
         const intensity = comparison.diff?.overrideIntensity?.total || 0;
         intensities.push(intensity);
         
-        // Count flips (direction changes)
+        // Track scenario
+        const scenario = comparison.brain?.decision?.scenario || 'BASE';
+        scenarios.push(scenario);
+        
+        // Count flips (direction changes) with regime breakdown
         if (i > 0) {
           const prevDelta = deltas[i - 1];
           if ((delta > 0 && prevDelta < 0) || (delta < 0 && prevDelta > 0)) {
             flipCount++;
+            // Track by current regime
+            if (scenario === 'BASE') flipsByRegime.base++;
+            else if (scenario === 'RISK') flipsByRegime.risk++;
+            else if (scenario === 'TAIL') flipsByRegime.tail++;
           }
         }
-        
-        // Track intensity (use actual override intensity)
-        totalIntensity += intensity;
+        lastScenario = scenario;
         
         // Track degradation (if delta is negative = Brain hurt performance)
         if (delta < params.gates.maxDegradationPp / 100) {
@@ -243,12 +253,35 @@ export class AdaptiveService {
     const maxIntensity = intensities.length > 0 ? Math.max(...intensities) : 0;
     
     // Calculate stability (variance of deltas)
-    const variance = deltas.reduce((sum, d) => sum + Math.pow(d - avgDelta, 2), 0) / n;
-    const stabilityScore = 1 - Math.min(1, Math.sqrt(variance) * 10); // Lower variance = higher stability
+    const deltaVariance = deltas.reduce((sum, d) => sum + Math.pow(d - avgDelta, 2), 0) / n;
+    const stabilityScore = 1 - Math.min(1, Math.sqrt(deltaVariance) * 10); // Lower variance = higher stability
+    
+    // Calculate intensity variance
+    const avgIntensityCalc = intensities.reduce((a, b) => a + b, 0) / intensities.length;
+    const intensityVariance = intensities.reduce((sum, i) => sum + Math.pow(i - avgIntensityCalc, 2), 0) / intensities.length;
     
     // Convert to yearly flip rate
     const periodDays = (new Date(end).getTime() - new Date(start).getTime()) / (24 * 60 * 60 * 1000);
     const flipRatePerYear = periodDays > 0 ? (flipCount / periodDays) * 365 : 0;
+    
+    // Calculate tail scenario rate
+    const tailCount = scenarios.filter(s => s === 'TAIL').length;
+    const tailScenarioRate = n > 0 ? tailCount / n : 0;
+    
+    // Calculate regime flip sensitivity (flips that happen on scenario changes)
+    let scenarioChanges = 0;
+    for (let i = 1; i < scenarios.length; i++) {
+      if (scenarios[i] !== scenarios[i-1]) scenarioChanges++;
+    }
+    const regimeFlipSensitivity = scenarioChanges > 0 ? flipCount / scenarioChanges : 0;
+    
+    // Flip rate by regime (normalized)
+    const totalFlips = flipsByRegime.base + flipsByRegime.risk + flipsByRegime.tail;
+    const flipRateByRegime = {
+      base: totalFlips > 0 ? flipsByRegime.base / totalFlips : 0,
+      risk: totalFlips > 0 ? flipsByRegime.risk / totalFlips : 0,
+      tail: totalFlips > 0 ? flipsByRegime.tail / totalFlips : 0,
+    };
     
     return {
       avgDeltaHitRatePp: round4(avgDelta * 100),  // Convert to percentage points
@@ -259,6 +292,22 @@ export class AdaptiveService {
       maxOverrideIntensity: round4(maxIntensity),
       stabilityScore: round4(Math.max(0, stabilityScore)),
       degradationCount,
+      
+      // Extended metrics
+      tailScenarioRate: round4(tailScenarioRate),
+      intensityVariance: round4(intensityVariance),
+      regimeFlipSensitivity: round4(regimeFlipSensitivity),
+      
+      // Horizon breakdown (placeholder - needs full backtest)
+      deltaByHorizon: {
+        d30: round4(avgDelta * 100),  // Approximate from aggregate
+        d90: round4(avgDelta * 100),
+        d180: round4(avgDelta * 100),
+        d365: round4(avgDelta * 100),
+      },
+      
+      // Regime breakdown
+      flipRateByRegime,
     };
   }
 
