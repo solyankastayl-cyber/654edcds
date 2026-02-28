@@ -317,7 +317,8 @@ export async function getEngineGlobalWithBrain(params: {
   const intensityCap = scenario === 'TAIL' ? 0.60 : 0.35;
   
   const overrideIntensity: OverrideIntensitySection = {
-    brain: Math.round(brainIntensity * 1000) / 1000,
+    brain: Math.round(brainDirectivesIntensity * 1000) / 1000,
+    metaRiskScale: Math.round(metaRiskScaleIntensity * 1000) / 1000,
     optimizer: Math.round(optimizerIntensity * 1000) / 1000,
     total: Math.round(totalIntensity * 1000) / 1000,
     cap: intensityCap,
