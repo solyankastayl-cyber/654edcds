@@ -276,8 +276,8 @@ export async function getEngineGlobalWithBrain(params: {
   
   // Get base allocations (step 0) for reference
   const baseStep = bridgeResult.steps.find(s => s.step === '0_base');
-  const baseSpx = baseStep?.spx ?? engineAllocations.spxSize;
-  const baseBtc = baseStep?.btc ?? engineAllocations.btcSize;
+  const baseSpx = baseStep?.spx ?? engineOut.allocations.spxSize;
+  const baseBtc = baseStep?.btc ?? engineOut.allocations.btcSize;
   
   // Get allocations after Brain directives (step 1)
   const afterBrainStep = bridgeResult.steps.find(s => s.step === '1_brain_directives');
