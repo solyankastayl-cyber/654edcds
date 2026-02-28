@@ -306,12 +306,14 @@ export async function getEngineGlobalWithBrain(params: {
     ? Math.max(Math.abs(optimizerResult.deltas.spx), Math.abs(optimizerResult.deltas.btc))
     : 0;
   
-  // Total intensity = delta from base to final
+  // Total intensity = delta from base to final (use actual engine baseline, not bridge steps)
+  const actualBaseSpx = engineOut.allocations.spxSize;
+  const actualBaseBtc = engineOut.allocations.btcSize;
   const finalSpx = finalAllocations.spxSize;
   const finalBtc = finalAllocations.btcSize;
   const totalIntensity = Math.max(
-    Math.abs(finalSpx - baseSpx),
-    Math.abs(finalBtc - baseBtc)
+    Math.abs(finalSpx - actualBaseSpx),
+    Math.abs(finalBtc - actualBaseBtc)
   );
   
   const scenario = brainDecision?.scenario?.name || 'BASE';
