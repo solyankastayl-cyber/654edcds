@@ -99,24 +99,53 @@ export interface OverrideReasoning {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SCENARIO ENGINE
+// SCENARIO ENGINE (with P12.0 Sanity Layer)
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Rolling TAIL rate tracker (simple in-memory)
+ */
+let tailRateHistory: boolean[] = [];
+const TAIL_RATE_WINDOW = 12;
+
+function updateTailRateHistory(isTail: boolean): number {
+  tailRateHistory.push(isTail);
+  if (tailRateHistory.length > TAIL_RATE_WINDOW) {
+    tailRateHistory = tailRateHistory.slice(-TAIL_RATE_WINDOW);
+  }
+  return tailRateHistory.filter(Boolean).length / tailRateHistory.length;
+}
+
+export function getTailRateRolling(): number {
+  if (tailRateHistory.length === 0) return 0;
+  return tailRateHistory.filter(Boolean).length / tailRateHistory.length;
+}
+
+export function resetTailRateHistory(): void {
+  tailRateHistory = [];
+}
+
+/**
  * Compute probabilistic scenario from forecast + world state
+ * NOW WITH P12.0 Sanity Layer Integration
  */
 export function computeForecastScenario(
   forecast: QuantileForecastResponse,
-  world: WorldStatePack
-): { scenario: ScenarioPack; reasoning: OverrideReasoning } {
+  world: WorldStatePack,
+  options?: { skipSanity?: boolean }
+): { scenario: ScenarioPack; reasoning: OverrideReasoning; diagnostics?: ScenarioDiagnostics } {
   const dxy = world.assets.dxy;
   const regimeProbs = dxy?.macroV2?.regime.probs || {};
   const guardLevel = dxy?.guard?.level || 'NONE';
+  const crossAssetRegime = world.crossAsset?.regime?.label || undefined;
   
   // Get worst-case horizon metrics
   let maxTailRisk = 0;
   let worstQ05 = 0;
   let dominantHorizon: Horizon = '90D';
+  let q05_90d = 0;
+  let q50_90d = 0;
+  let q95_90d = 0;
   
   for (const h of HORIZONS) {
     const hf = forecast.byHorizon[h];
@@ -129,6 +158,20 @@ export function computeForecastScenario(
     if (hf.q05 < worstQ05) {
       worstQ05 = hf.q05;
     }
+    
+    // Get 90D for sanity input
+    if (h === '90D') {
+      q05_90d = hf.q05;
+      q50_90d = hf.q50 ?? 0;
+      q95_90d = hf.q95 ?? 0;
+    }
+  }
+  
+  // Fallback to 180D if 90D not available
+  if (q05_90d === 0 && forecast.byHorizon['180D']) {
+    q05_90d = forecast.byHorizon['180D'].q05;
+    q50_90d = forecast.byHorizon['180D'].q50 ?? 0;
+    q95_90d = forecast.byHorizon['180D'].q95 ?? 0;
   }
   
   // Extract stress/vol from world state
@@ -141,7 +184,10 @@ export function computeForecastScenario(
   // Compute riskScore
   const riskScore = 0.5 * maxTailRisk + 0.3 * regimePStress + 0.2 * volSpike;
   
-  // Scenario posterior
+  // ─────────────────────────────────────────────────────────────
+  // RAW Scenario Probabilities (before sanity)
+  // ─────────────────────────────────────────────────────────────
+  
   let pTail = clamp01(maxTailRisk * 0.8);
   let pRisk = clamp01(regimePStress * 0.7 + volSpike * 0.3);
   let pBase = 1 - pRisk - pTail;
@@ -168,41 +214,66 @@ export function computeForecastScenario(
     pBase = 0;
   }
   
-  // Normalize to sum = 1
-  const sum = pBase + pRisk + pTail;
-  if (sum > 0) {
-    pBase /= sum;
-    pRisk /= sum;
-    pTail /= sum;
+  // Normalize raw probabilities
+  const rawSum = pBase + pRisk + pTail;
+  if (rawSum > 0) {
+    pBase /= rawSum;
+    pRisk /= rawSum;
+    pTail /= rawSum;
   }
   
-  // Round
-  pBase = Math.round(pBase * 100) / 100;
-  pRisk = Math.round(pRisk * 100) / 100;
-  pTail = Math.round(pTail * 100) / 100;
+  const rawProbs: Record<ScenarioName, number> = {
+    BASE: Math.round(pBase * 10000) / 10000,
+    RISK: Math.round(pRisk * 10000) / 10000,
+    TAIL: Math.round(pTail * 10000) / 10000,
+  };
   
-  // Fix rounding
-  const roundSum = pBase + pRisk + pTail;
-  if (Math.abs(roundSum - 1) > 0.001) {
-    pBase = Math.round((pBase + (1 - roundSum)) * 100) / 100;
-  }
+  // ─────────────────────────────────────────────────────────────
+  // P12.0 SANITY LAYER (if enabled)
+  // ─────────────────────────────────────────────────────────────
   
-  // Determine dominant scenario
-  let name: ScenarioName = 'BASE';
-  if (pTail >= 0.25) {
-    name = 'TAIL';
-  } else if (pRisk >= 0.35) {
-    name = 'RISK';
+  let finalProbs = rawProbs;
+  let finalScenario: ScenarioName = 'BASE';
+  let diagnostics: ScenarioDiagnostics | undefined;
+  
+  if (!options?.skipSanity) {
+    const sanityService = getBrainScenarioSanityService();
+    
+    const sanityInput: SanityInput = {
+      q05: q05_90d,
+      q50: q50_90d,
+      q95: q95_90d,
+      guardLevel,
+      crossAssetRegime,
+      tailRateRolling: getTailRateRolling(),
+      rawProbs,
+    };
+    
+    const sanityOutput = sanityService.applySanity(sanityInput);
+    finalProbs = sanityOutput.finalProbs;
+    finalScenario = sanityOutput.finalScenario;
+    diagnostics = sanityOutput.diagnostics;
+    
+    // Update tail rate history
+    updateTailRateHistory(finalScenario === 'TAIL');
+  } else {
+    // No sanity: use raw scenario
+    if (rawProbs.TAIL >= 0.25) finalScenario = 'TAIL';
+    else if (rawProbs.RISK >= 0.35) finalScenario = 'RISK';
+    else finalScenario = 'BASE';
+    
+    // Still update history for consistency
+    updateTailRateHistory(finalScenario === 'TAIL');
   }
   
   // Confidence from forecast model
   const confidence = forecast.model.isBaseline ? 0.4 : 0.7;
   
   const scenario: ScenarioPack = {
-    name,
-    probs: { BASE: pBase, RISK: pRisk, TAIL: pTail },
+    name: finalScenario,
+    probs: finalProbs,
     confidence,
-    description: getScenarioDescription(name, forecast, world),
+    description: getScenarioDescription(finalScenario, forecast, world),
   };
   
   // Build initial reasoning (overrides will be added by computeOverrides)
@@ -218,7 +289,7 @@ export function computeForecastScenario(
     },
   };
   
-  return { scenario, reasoning };
+  return { scenario, reasoning, diagnostics };
 }
 
 // ═══════════════════════════════════════════════════════════════
