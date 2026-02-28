@@ -279,25 +279,47 @@ export class AdaptiveService {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // OBJECTIVE SCORE
+  // OBJECTIVE SCORE (Enhanced with tail/flip penalties)
   // ═══════════════════════════════════════════════════════════════
 
   private computeScore(metrics: TuningMetrics): number {
     // Objective: maximize delta hit rate, penalize bad behaviors
     let score = metrics.avgDeltaHitRatePp;
     
-    // Penalties
+    // 1. Degradation penalty (if any horizon < -1pp)
     if (metrics.minDeltaPp < -1) {
-      score -= 2; // Degradation penalty
+      score -= 2;
     }
+    
+    // 2. Flip storm penalty (усилено)
     if (metrics.flipRatePerYear > 6) {
-      score -= (metrics.flipRatePerYear - 6) * 0.5; // Flip storm penalty
+      score -= (metrics.flipRatePerYear - 6) * 1.0; // Увеличен вес
     }
+    
+    // 3. Override explosion penalty (усилено для TAIL proximity)
     if (metrics.maxOverrideIntensity > 0.35) {
-      score -= (metrics.maxOverrideIntensity - 0.35) * 10; // Override explosion penalty
+      const overCapDelta = metrics.maxOverrideIntensity - 0.35;
+      score -= overCapDelta * 15; // Усилен вес
     }
+    
+    // 4. Instability penalty
     if (metrics.stabilityScore < 0.5) {
-      score -= (0.5 - metrics.stabilityScore) * 2; // Instability penalty
+      score -= (0.5 - metrics.stabilityScore) * 2;
+    }
+    
+    // 5. NEW: Tail frequency increase penalty
+    if (metrics.tailScenarioRate > 0.40) { // >40% tail scenarios = suspicious
+      score -= (metrics.tailScenarioRate - 0.40) * 5;
+    }
+    
+    // 6. NEW: Override intensity variance penalty (oscillation)
+    if (metrics.intensityVariance > 0.05) {
+      score -= metrics.intensityVariance * 10;
+    }
+    
+    // 7. NEW: Regime flip sensitivity penalty
+    if (metrics.regimeFlipSensitivity > 0.3) {
+      score -= (metrics.regimeFlipSensitivity - 0.3) * 3;
     }
     
     return round4(score);
