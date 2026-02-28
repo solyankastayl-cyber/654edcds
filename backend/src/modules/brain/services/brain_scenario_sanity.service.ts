@@ -17,18 +17,22 @@ import type { GuardLevel } from '../contracts/asset_state.contract.js';
 // ═══════════════════════════════════════════════════════════════════
 
 const THRESHOLDS = {
-  // TAIL gate thresholds
-  q05_hard_tail: -0.03,           // q05 <= -3% for TAIL eligibility
-  spread_norm_tail: 1.25,         // spreadNorm >= 1.25 for TAIL eligibility
+  // TAIL gate thresholds (softened per P12.0 FIX #1)
+  q05_hard_tail: -0.02,           // q05 <= -2% for TAIL eligibility (was -3%)
+  spread_norm_tail: 1.10,         // spreadNorm >= 1.10 for TAIL eligibility (was 1.25)
   guard_levels_tail: ['CRISIS', 'BLOCK'] as GuardLevel[],
   cross_asset_risk_off: ['RISK_OFF_SYNC', 'FLIGHT_TO_QUALITY'],
   tail_gate_min_conditions: 2,    // Need ≥2 of 4 conditions for TAIL
   
-  // Anti-collapse (tail rate penalty)
-  tail_rate_penalty_35: 0.70,     // Multiply P_tail by this if tailRate > 0.35
-  tail_rate_penalty_50: 0.55,     // Multiply P_tail by this if tailRate > 0.50
-  tail_rate_threshold_35: 0.35,
-  tail_rate_threshold_50: 0.50,
+  // RISK gate thresholds (FIX #2: separate gate for RISK)
+  risk_gate_min_conditions: 1,    // Need ≥1 of 4 conditions for RISK
+  risk_score_threshold: 0.45,     // OR riskScore >= 0.45
+  
+  // Anti-collapse (tail rate penalty) - raised triggers per FIX #5
+  tail_rate_penalty_45: 0.70,     // Multiply P_tail by this if tailRate > 0.45 (was 0.35)
+  tail_rate_penalty_65: 0.55,     // Multiply P_tail by this if tailRate > 0.65 (was 0.50)
+  tail_rate_threshold_45: 0.45,
+  tail_rate_threshold_65: 0.65,
   
   // Temperature scaling
   concentration_threshold_55: 0.55,
@@ -36,14 +40,15 @@ const THRESHOLDS = {
   temperature_55: 1.25,
   temperature_70: 1.40,
   
-  // Prior weights
-  prior_blend: 0.35,              // 35% prior + 65% raw
+  // Prior weights (adaptive per FIX #4)
+  prior_blend_default: 0.35,
+  prior_blend_confident: 0.25,    // When concentration > 0.55
   
   // Default priors (expected distribution in "normal world")
   priors: {
-    BASE: 0.60,
-    RISK: 0.30,
-    TAIL: 0.10,
+    BASE: 0.55,   // Lowered from 0.60
+    RISK: 0.32,   // Raised from 0.30
+    TAIL: 0.13,   // Raised from 0.10
   } as Record<ScenarioName, number>,
 };
 
